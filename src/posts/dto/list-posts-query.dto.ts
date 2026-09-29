@@ -1,0 +1,53 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+export const LIST_STATUSES = ['PUBLISHED', 'DRAFT', 'ALL'] as const;
+export type ListStatus = (typeof LIST_STATUSES)[number];
+
+export class ListPostsQueryDto {
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'Sayfa numarası tam sayı olmalı' })
+  @Min(1, { message: 'Sayfa numarası en az 1 olmalı' })
+  page = 1;
+
+  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'Sayfa boyutu tam sayı olmalı' })
+  @Min(1, { message: 'Sayfa boyutu 1-50 arasında olmalı' })
+  @Max(50, { message: 'Sayfa boyutu 1-50 arasında olmalı' })
+  limit = 10;
+
+  @ApiPropertyOptional({ description: "Kategori slug'ı" })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ description: 'Etiket adı' })
+  @IsOptional()
+  @IsString()
+  tag?: string;
+
+  @ApiPropertyOptional({ description: 'Yazarın kullanıcı adı' })
+  @IsOptional()
+  @IsString()
+  author?: string;
+
+  @ApiPropertyOptional({
+    enum: LIST_STATUSES,
+    default: 'PUBLISHED',
+    description:
+      'DRAFT ve ALL yalnızca giriş yapmış kullanıcının kendi yazılarını döner',
+  })
+  @IsOptional()
+  @IsIn(LIST_STATUSES, { message: 'Geçersiz durum filtresi' })
+  status: ListStatus = 'PUBLISHED';
+
+  @ApiPropertyOptional({ enum: ['new'], default: 'new' })
+  @IsOptional()
+  @IsIn(['new'], { message: 'Geçersiz sıralama' })
+  sort = 'new' as const;
+}

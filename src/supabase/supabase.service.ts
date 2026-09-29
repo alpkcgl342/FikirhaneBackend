@@ -20,6 +20,21 @@ export class SupabaseService {
    * Her kimlik doğrulama işlemi için yeni bir istemci oluşturulur; böylece
    * eşzamanlı isteklerde bir kullanıcının oturumu diğerine sızmaz.
    */
+  /**
+   * Kullanıcının access token'ıyla çalışan istemci; Storage RLS kuralları bu kullanıcıya
+   * göre uygulanır (gizli anahtar gerekmez).
+   */
+  createUserClient(accessToken: string): SupabaseClient {
+    return createClient(this.url, this.publishableKey, {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }
+
   createAuthClient(): SupabaseClient {
     return createClient(this.url, this.publishableKey, {
       auth: {

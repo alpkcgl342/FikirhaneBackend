@@ -74,6 +74,9 @@ FikirhaneBackend/
 │   ├── main.ts
 │   ├── app.module.ts
 │   ├── auth/               # Kayıt, giriş, e-posta doğrulama, token doğrulama, guard
+│   ├── categories/         # Kategori listesi
+│   ├── posts/              # Yazı CRUD, slug, okuma süresi, etiketler
+│   ├── uploads/            # Görsel yükleme (Supabase Storage)
 │   ├── prisma/             # PrismaService
 │   ├── supabase/           # Supabase istemcisi
 │   ├── config/             # Ortam değişkeni doğrulama
@@ -83,13 +86,15 @@ FikirhaneBackend/
 │   ├── schema.prisma
 │   ├── migrations/
 │   └── seed.ts
+├── supabase/
+│   └── storage.sql         # Görsel kovası ve yükleme kuralı (SQL Editor'de bir kez)
 ├── prisma.config.ts
 ├── .env.example
 ├── package.json
 └── tsconfig.json
 ```
 
-Sonraki fazlarda `src/` altına `users`, `posts`, `comments`, `categories`, `tags`, `likes`, `bookmarks`, `follows`, `notifications`, `reports`, `uploads` modülleri eklenecek.
+Sonraki fazlarda `src/` altına `users`, `comments`, `likes`, `bookmarks`, `follows`, `notifications`, `reports` modülleri eklenecek. Etiketler ayrı bir modül yerine yazılarla birlikte yönetilir.
 
 ---
 
@@ -108,6 +113,7 @@ cp .env.example .env         # Değerleri doldurun (aşağıya bakın)
 npm install                  # postinstall ile Prisma istemcisi de üretilir
 npm run db:migrate           # prisma migrate deploy
 npm run db:seed              # Kategoriler
+# Supabase SQL Editor'de bir kez: supabase/storage.sql (görsel yükleme)
 npm run start:dev
 ```
 
@@ -193,20 +199,29 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 | GET | `/users/:username` | Profil bilgisi | |
 | PATCH | `/users/me` 🔒 | Profil güncelle | |
 | POST | `/users/:id/follow` 🔒 | Takip et / bırak | |
-| GET | `/posts` | Yazı listesi (`?category=&tag=&sort=&page=`) | |
-| GET | `/posts/:slug` | Yazı detayı | |
-| POST | `/posts` 🔒 | Yazı oluştur | |
-| PATCH | `/posts/:id` 🔒 | Yazı düzenle (sadece yazar) | |
-| DELETE | `/posts/:id` 🔒 | Yazı sil | |
+| GET | `/posts` | Yazı listesi (`?category=&tag=&author=&status=&page=&limit=`) | ✅ |
+| GET | `/posts/:slug` | Yazı detayı (taslağı yalnızca yazarı görür) | ✅ |
+| POST | `/posts` 🔒 | Yazı oluştur | ✅ |
+| PATCH | `/posts/:id` 🔒 | Yazı düzenle (sadece yazar) | ✅ |
+| DELETE | `/posts/:id` 🔒 | Yazı sil (sadece yazar) | ✅ |
+| POST | `/uploads/image` 🔒 | Görsel yükle (multipart `file`, en fazla 4 MB) | ✅ |
 | POST | `/posts/:id/like` 🔒 | Beğen / beğeniyi kaldır | |
 | POST | `/posts/:id/bookmark` 🔒 | Kaydet / kaldır | |
 | GET | `/posts/:id/comments` | Yorumlar | |
 | POST | `/posts/:id/comments` 🔒 | Yorum yap | |
-| GET | `/categories` | Kategoriler | |
+| GET | `/categories` | Kategoriler | ✅ |
 | GET | `/search?q=` | Arama | |
 | GET | `/notifications` 🔒 | Bildirimler | |
 | POST | `/reports` 🔒 | Şikâyet oluştur | |
 | GET | `/admin/reports` 🔒 | Şikâyetler (moderatör/yönetici) | |
+
+### Yazılar
+
+- `GET /posts` varsayılan olarak yayınlanmış yazıları en yeniden eskiye döner: `{ items, page, pageSize, total, totalPages }`. Liste öğelerinde `content` yerine düz metin `excerpt` bulunur.
+- `status=DRAFT` veya `status=ALL` giriş gerektirir ve **her zaman isteyen kullanıcının kendi yazılarını** döner (`author` parametresi yok sayılır).
+- Slug başlıktan üretilir (Türkçe karakterler dönüştürülür) ve sonuna rastgele 6 karakter eklenir; yazı düzenlense de değişmez.
+- `readingTime` dakikada 200 kelimeye göre hesaplanır. Etiketler küçük harfe çevrilir, en fazla 5 tanedir ve yoksa oluşturulur.
+- `coverUrl` yalnızca `POST /uploads/image` ile projenin Storage kovasına yüklenmiş bir görsel olabilir. Yükleme, kullanıcının kendi token'ıyla yapılır ve dosya türü içeriğine (magic bytes) bakılarak doğrulanır; SVG kabul edilmez.
 
 ### Kimlik doğrulama yanıtları
 
@@ -245,7 +260,7 @@ Temel tablolar ve ilişkiler (`prisma/schema.prisma`):
 ## Yol Haritası
 
 - [x] **Faz 1 — Temel:** Proje iskeleti, veritabanı şeması, kayıt / giriş, e-posta doğrulama
-- [ ] **Faz 2 — Yazılar:** Yazı CRUD, Markdown editör, kategoriler, etiketler, görsel yükleme
+- [x] **Faz 2 — Yazılar:** Yazı CRUD, Markdown editör, kategoriler, etiketler, görsel yükleme
 - [ ] **Faz 3 — Etkileşim:** Yorumlar, beğeni, kaydetme, takip
 - [ ] **Faz 4 — Keşfet:** Ana akış, arama, popüler yazılar
 - [ ] **Faz 5 — Topluluk:** Bildirimler, şikâyet ve moderasyon paneli
