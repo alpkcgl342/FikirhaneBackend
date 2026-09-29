@@ -30,6 +30,7 @@ function dbPost(overrides: Record<string, unknown> = {}) {
     author: { username: 'ayse', displayName: 'Ayşe', avatarUrl: null },
     category: null,
     tags: [{ tag: { name: 'deneme' } }],
+    _count: { likes: 3, comments: 2 },
     ...overrides,
   };
 }
@@ -45,6 +46,8 @@ function setup() {
       delete: vi.fn(),
     },
     category: { count: vi.fn() },
+    like: { findUnique: vi.fn().mockResolvedValue(null) },
+    bookmark: { findUnique: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn((queries: Promise<unknown>[]) => Promise.all(queries)),
   };
   const service = new PostsService(
@@ -129,6 +132,76 @@ describe('PostsService', () => {
 
       expect(post.isOwner).toBe(true);
       expect(post.content).toBe('**Merhaba** dünya');
+    });
+
+    it('beğeni/yorum sayılarını ve izleyicinin beğenip kaydettiğini döner', async () => {
+      const { service, prisma } = setup();
+      prisma.post.findUnique.mockResolvedValue(dbPost());
+      prisma.like.findUnique.mockResolvedValue({ userId: OTHER.id });
+
+      const post = await service.getBySlug('x', OTHER);
+
+      expect(post).toMatchObject({
+        likeCount: 3,
+        commentCount: 2,
+        likedByMe: true,
+        bookmarkedByMe: false,
+        isOwner: false,
+      });
+      expect(prisma.like.findUnique).toHaveBeenCalledWith({
+        where: { userId_postId: { userId: OTHER.id, postId: 'post-id' } },
+        select: { userId: true },
+      });
+    });
+
+    it('anonim izleyici için beğeni sorgusu yapılmaz', async () => {
+      const { service, prisma } = setup();
+      prisma.post.findUnique.mockResolvedValue(dbPost());
+
+      const post = await service.getBySlug('x');
+
+      expect(post.likedByMe).toBe(false);
+      expect(prisma.like.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findPublishedOrThrow', () => {
+    it.each([null, { id: 'p', authorId: AUTHOR.id, status: 'DRAFT' }])(
+      'yok ya da taslak (%o) ise 404 döner',
+      async (post) => {
+        const { service, prisma } = setup();
+        prisma.post.findUnique.mockResolvedValue(post);
+
+        await expect(service.findPublishedOrThrow('p')).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      },
+    );
+  });
+
+  describe('list (kaydedilenler)', () => {
+    it('giriş yapmadan kaydedilenler istenirse 401 döner', async () => {
+      const { service } = setup();
+      await expect(
+        service.list(query({ bookmarked: true })),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('yalnızca izleyicinin kaydettiği yayındaki yazıları döner', async () => {
+      const { service, prisma } = setup();
+      prisma.post.count.mockResolvedValue(0);
+      prisma.post.findMany.mockResolvedValue([]);
+
+      await service.list(query({ bookmarked: true }), OTHER);
+
+      expect(prisma.post.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: 'PUBLISHED',
+            bookmarks: { some: { userId: OTHER.id } },
+          },
+        }),
+      );
     });
   });
 

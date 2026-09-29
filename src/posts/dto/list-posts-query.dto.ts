@@ -1,6 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export const LIST_STATUSES = ['PUBLISHED', 'DRAFT', 'ALL'] as const;
 export type ListStatus = (typeof LIST_STATUSES)[number];
@@ -35,6 +43,16 @@ export class ListPostsQueryDto {
   @IsOptional()
   @IsString()
   author?: string;
+
+  @ApiPropertyOptional({
+    description: 'true: yalnızca giriş yapan kullanıcının kaydettiği yazılar',
+  })
+  @IsOptional()
+  @Transform(
+    ({ value }: { value: unknown }) => value === 'true' || value === true,
+  )
+  @IsBoolean()
+  bookmarked?: boolean;
 
   @ApiPropertyOptional({
     enum: LIST_STATUSES,

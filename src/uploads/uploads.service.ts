@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { POST_IMAGES_BUCKET } from '../posts/posts.service.js';
+import { POST_IMAGES_BUCKET } from '../common/storage.js';
 import { SupabaseService } from '../supabase/supabase.service.js';
 import { detectImageType } from './image-type.util.js';
 

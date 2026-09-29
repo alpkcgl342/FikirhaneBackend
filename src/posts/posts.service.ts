@@ -5,11 +5,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { AuthUser } from '../auth/token-verifier.service.js';
+import { isOwnImageUrl } from '../common/storage.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { PostStatus } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SupabaseService } from '../supabase/supabase.service.js';
-import type { AuthUser } from '../auth/token-verifier.service.js';
 import type { CreatePostDto } from './dto/create-post.dto.js';
 import type { ListPostsQueryDto } from './dto/list-posts-query.dto.js';
 import type { UpdatePostDto } from './dto/update-post.dto.js';
@@ -20,25 +21,24 @@ import {
   uniqueSlug,
 } from './post-text.util.js';
 
-export const POST_IMAGES_BUCKET = 'post-images';
-
 const postInclude = {
   author: { select: { username: true, displayName: true, avatarUrl: true } },
   category: { select: { id: true, name: true, slug: true } },
   tags: { select: { tag: { select: { name: true } } } },
+  _count: { select: { likes: true, comments: true } },
 } satisfies Prisma.PostInclude;
 
 type PostWithRelations = Prisma.PostGetPayload<{ include: typeof postInclude }>;
 
 @Injectable()
 export class PostsService {
-  private readonly coverUrlPrefix: string;
+  private readonly supabaseUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
     supabase: SupabaseService,
   ) {
-    this.coverUrlPrefix = `${supabase.projectUrl}/storage/v1/object/public/${POST_IMAGES_BUCKET}/`;
+    this.supabaseUrl = supabase.projectUrl;
   }
 
   async list(query: ListPostsQueryDto, viewer?: AuthUser) {
@@ -54,6 +54,14 @@ export class PostsService {
       }
       where.authorId = viewer.id;
       if (query.status === 'DRAFT') where.status = PostStatus.DRAFT;
+    }
+    if (query.bookmarked) {
+      if (!viewer) {
+        throw new UnauthorizedException(
+          'Kaydedilen yazıları görmek için giriş yapın',
+        );
+      }
+      where.bookmarks = { some: { userId: viewer.id } };
     }
     if (query.category) where.category = { slug: query.category };
     if (query.tag) {
@@ -99,7 +107,37 @@ export class PostsService {
     ) {
       throw new NotFoundException('Yazı bulunamadı');
     }
-    return toPostDetail(post, viewer);
+
+    let likedByMe = false;
+    let bookmarkedByMe = false;
+    if (viewer) {
+      const key = { userId_postId: { userId: viewer.id, postId: post.id } };
+      const [like, bookmark] = await Promise.all([
+        this.prisma.like.findUnique({ where: key, select: { userId: true } }),
+        this.prisma.bookmark.findUnique({
+          where: key,
+          select: { userId: true },
+        }),
+      ]);
+      likedByMe = Boolean(like);
+      bookmarkedByMe = Boolean(bookmark);
+    }
+    return { ...toPostDetail(post, viewer), likedByMe, bookmarkedByMe };
+  }
+
+  /**
+   * Beğeni, kaydetme ve yorum yalnızca yayındaki yazılar için yapılabilir;
+   * taslaklar (yazarı dahil) bu işlemlerde yokmuş gibi davranır.
+   */
+  async findPublishedOrThrow(postId: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true, status: true },
+    });
+    if (!post || post.status !== PostStatus.PUBLISHED) {
+      throw new NotFoundException('Yazı bulunamadı');
+    }
+    return post;
   }
 
   async create(dto: CreatePostDto, authorId: string) {
@@ -194,9 +232,8 @@ export class PostsService {
     if (!exists) throw new BadRequestException('Kategori bulunamadı');
   }
 
-  /** Kapak görseli yalnızca projenin kendi Storage kovasından olabilir. */
   private assertCoverUrl(coverUrl: string | null | undefined) {
-    if (coverUrl && !coverUrl.startsWith(this.coverUrlPrefix)) {
+    if (coverUrl && !isOwnImageUrl(coverUrl, this.supabaseUrl)) {
       throw new BadRequestException(
         'Kapak görseli Fikirhane üzerinden yüklenmelidir',
       );
@@ -224,6 +261,8 @@ function toPostSummary(post: PostWithRelations) {
     author: post.author,
     category: post.category,
     tags: post.tags.map((t) => t.tag.name),
+    likeCount: post._count.likes,
+    commentCount: post._count.comments,
   };
 }
 

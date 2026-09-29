@@ -74,9 +74,13 @@ FikirhaneBackend/
 │   ├── main.ts
 │   ├── app.module.ts
 │   ├── auth/               # Kayıt, giriş, e-posta doğrulama, token doğrulama, guard
+│   ├── bookmarks/          # Kaydetme (aç/kapa)
 │   ├── categories/         # Kategori listesi
+│   ├── comments/           # İç içe yorumlar
+│   ├── likes/              # Beğeni (aç/kapa)
 │   ├── posts/              # Yazı CRUD, slug, okuma süresi, etiketler
 │   ├── uploads/            # Görsel yükleme (Supabase Storage)
+│   ├── users/              # Profil ve takip
 │   ├── prisma/             # PrismaService
 │   ├── supabase/           # Supabase istemcisi
 │   ├── config/             # Ortam değişkeni doğrulama
@@ -94,7 +98,7 @@ FikirhaneBackend/
 └── tsconfig.json
 ```
 
-Sonraki fazlarda `src/` altına `users`, `comments`, `likes`, `bookmarks`, `follows`, `notifications`, `reports` modülleri eklenecek. Etiketler ayrı bir modül yerine yazılarla birlikte yönetilir.
+Sonraki fazlarda `src/` altına `notifications` ve `reports` modülleri eklenecek. Etiketler yazılarla, takip ise `users` modülüyle birlikte yönetilir.
 
 ---
 
@@ -196,19 +200,19 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 | GET | `/auth/confirm` | E-posta doğrulama bağlantısı (özel SMTP ile kullanılır) | ✅ |
 | POST | `/auth/resend-confirmation` | Doğrulama e-postasını tekrar gönder | ✅ |
 | GET | `/auth/me` 🔒 | Oturumdaki kullanıcı | ✅ |
-| GET | `/users/:username` | Profil bilgisi | |
-| PATCH | `/users/me` 🔒 | Profil güncelle | |
-| POST | `/users/:id/follow` 🔒 | Takip et / bırak | |
-| GET | `/posts` | Yazı listesi (`?category=&tag=&author=&status=&page=&limit=`) | ✅ |
+| GET | `/users/:username` | Profil (sayılar, `isFollowing`; e-posta dönmez) | ✅ |
+| PATCH | `/users/me` 🔒 | Profil güncelle (`displayName`, `bio`, `avatarUrl`) | ✅ |
+| POST | `/users/:id/follow` 🔒 | Takip et / bırak → `{ following, followerCount }` | ✅ |
+| GET | `/posts` | Yazı listesi (`?category=&tag=&author=&status=&bookmarked=&page=&limit=`) | ✅ |
 | GET | `/posts/:slug` | Yazı detayı (taslağı yalnızca yazarı görür) | ✅ |
 | POST | `/posts` 🔒 | Yazı oluştur | ✅ |
 | PATCH | `/posts/:id` 🔒 | Yazı düzenle (sadece yazar) | ✅ |
 | DELETE | `/posts/:id` 🔒 | Yazı sil (sadece yazar) | ✅ |
 | POST | `/uploads/image` 🔒 | Görsel yükle (multipart `file`, en fazla 4 MB) | ✅ |
-| POST | `/posts/:id/like` 🔒 | Beğen / beğeniyi kaldır | |
-| POST | `/posts/:id/bookmark` 🔒 | Kaydet / kaldır | |
-| GET | `/posts/:id/comments` | Yorumlar | |
-| POST | `/posts/:id/comments` 🔒 | Yorum yap | |
+| POST | `/posts/:id/like` 🔒 | Beğen / kaldır → `{ liked, likeCount }` | ✅ |
+| POST | `/posts/:id/bookmark` 🔒 | Kaydet / kaldır → `{ bookmarked }` | ✅ |
+| GET | `/posts/:id/comments` | Yorumlar (düz liste, `parentId` ile ağaç) | ✅ |
+| POST | `/posts/:id/comments` 🔒 | Yorum / yanıt (`{ content, parentId? }`) | ✅ |
 | GET | `/categories` | Kategoriler | ✅ |
 | GET | `/search?q=` | Arama | |
 | GET | `/notifications` 🔒 | Bildirimler | |
@@ -261,7 +265,7 @@ Temel tablolar ve ilişkiler (`prisma/schema.prisma`):
 
 - [x] **Faz 1 — Temel:** Proje iskeleti, veritabanı şeması, kayıt / giriş, e-posta doğrulama
 - [x] **Faz 2 — Yazılar:** Yazı CRUD, Markdown editör, kategoriler, etiketler, görsel yükleme
-- [ ] **Faz 3 — Etkileşim:** Yorumlar, beğeni, kaydetme, takip
+- [x] **Faz 3 — Etkileşim:** Yorumlar, beğeni, kaydetme, takip
 - [ ] **Faz 4 — Keşfet:** Ana akış, arama, popüler yazılar
 - [ ] **Faz 5 — Topluluk:** Bildirimler, şikâyet ve moderasyon paneli
 - [ ] **Faz 6 — Yayın:** Testler, canlı ortama dağıtım, SEO ve performans
