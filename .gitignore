@@ -1,0 +1,21 @@
+# Bağımlılıklar ve derleme çıktıları
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Ortam değişkenleri
+.env
+.env.*
+!.env.example
+
+# Prisma tarafından üretilen istemci
+src/generated/
+
+# Vercel
+.vercel/
+
+# Editör / işletim sistemi
+.DS_Store
+Thumbs.db
+*.log
