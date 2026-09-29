@@ -34,4 +34,6 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-await bootstrap();
+// Üst seviye await kullanılmaz: Vercel'in başlatıcısı modülü require() ile yükler ve
+// Node.js, üst seviye await içeren ES modüllerini require() ile yükleyemez.
+void bootstrap();
