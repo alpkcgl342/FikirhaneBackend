@@ -8,6 +8,7 @@ import { validateEnv } from './config/env.validation.js';
 import { LikesModule } from './likes/likes.module.js';
 import { PostsModule } from './posts/posts.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { SearchModule } from './search/search.module.js';
 import { SupabaseModule } from './supabase/supabase.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -33,6 +34,7 @@ class HealthController {
     LikesModule,
     BookmarksModule,
     UsersModule,
+    SearchModule,
   ],
   controllers: [HealthController],
 })

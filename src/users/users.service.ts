@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { toPublicUser } from '../auth/auth.service.js';
 import type { AuthUser } from '../auth/token-verifier.service.js';
+import { containsInsensitive } from '../common/like.js';
 import { isOwnImageUrl } from '../common/storage.js';
 import { toggleRelation } from '../common/toggle.js';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -70,6 +71,22 @@ export class UsersService {
       isMe,
       isFollowing,
     };
+  }
+
+  /** Ad veya kullanıcı adında geçen en fazla 5 kullanıcı (en çok takipçisi olan önce). */
+  search(q: string) {
+    const term = containsInsensitive(q);
+    return this.prisma.user.findMany({
+      where: { OR: [{ displayName: term }, { username: term }] },
+      orderBy: [{ followers: { _count: 'desc' } }, { username: 'asc' }],
+      take: 5,
+      select: {
+        username: true,
+        displayName: true,
+        avatarUrl: true,
+        bio: true,
+      },
+    });
   }
 
   async updateMe(userId: string, dto: UpdateProfileDto) {

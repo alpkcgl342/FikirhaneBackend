@@ -179,6 +179,70 @@ describe('PostsService', () => {
     );
   });
 
+  describe('list (akış)', () => {
+    it('popüler sıralama beğeni, yorum ve yeniliğe göredir', async () => {
+      const { service, prisma } = setup();
+      prisma.post.count.mockResolvedValue(0);
+      prisma.post.findMany.mockResolvedValue([]);
+
+      await service.list(query({ sort: 'popular' }));
+
+      expect(prisma.post.findMany.mock.calls[0][0].orderBy).toEqual([
+        { likes: { _count: 'desc' } },
+        { comments: { _count: 'desc' } },
+        { createdAt: 'desc' },
+      ]);
+    });
+
+    it('takip akışı giriş gerektirir', async () => {
+      const { service } = setup();
+      await expect(
+        service.list(query({ following: true })),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('takip akışı yazar filtresiyle birleşir', async () => {
+      const { service, prisma } = setup();
+      prisma.post.count.mockResolvedValue(0);
+      prisma.post.findMany.mockResolvedValue([]);
+
+      await service.list(query({ following: true, author: 'ayse' }), OTHER);
+
+      expect(prisma.post.findMany.mock.calls[0][0].where).toEqual({
+        status: 'PUBLISHED',
+        author: {
+          username: 'ayse',
+          followers: { some: { followerId: OTHER.id } },
+        },
+      });
+    });
+  });
+
+  describe('search', () => {
+    it('yayındaki yazılarda joker karakterleri kaçışlanmış terimle arar', async () => {
+      const { service, prisma } = setup();
+      prisma.post.count.mockResolvedValue(0);
+      prisma.post.findMany.mockResolvedValue([]);
+
+      await service.search('50%_', 2, 5);
+
+      const args = prisma.post.findMany.mock.calls[0][0];
+      const term = { contains: '50\\%\\_', mode: 'insensitive' };
+      expect(args.where).toEqual({
+        status: 'PUBLISHED',
+        OR: [
+          { title: term },
+          { content: term },
+          { author: { displayName: term } },
+          { author: { username: term } },
+          { tags: { some: { tag: { name: term } } } },
+        ],
+      });
+      expect(args.skip).toBe(5);
+      expect(args.take).toBe(5);
+    });
+  });
+
   describe('list (kaydedilenler)', () => {
     it('giriş yapmadan kaydedilenler istenirse 401 döner', async () => {
       const { service } = setup();

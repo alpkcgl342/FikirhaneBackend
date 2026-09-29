@@ -13,6 +13,9 @@ import {
 export const LIST_STATUSES = ['PUBLISHED', 'DRAFT', 'ALL'] as const;
 export type ListStatus = (typeof LIST_STATUSES)[number];
 
+export const SORTS = ['new', 'popular'] as const;
+export type PostSort = (typeof SORTS)[number];
+
 export class ListPostsQueryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
@@ -64,8 +67,24 @@ export class ListPostsQueryDto {
   @IsIn(LIST_STATUSES, { message: 'Geçersiz durum filtresi' })
   status: ListStatus = 'PUBLISHED';
 
-  @ApiPropertyOptional({ enum: ['new'], default: 'new' })
+  @ApiPropertyOptional({
+    description:
+      'true: yalnızca giriş yapan kullanıcının takip ettiklerinin yazıları',
+  })
   @IsOptional()
-  @IsIn(['new'], { message: 'Geçersiz sıralama' })
-  sort = 'new' as const;
+  @Transform(
+    ({ value }: { value: unknown }) => value === 'true' || value === true,
+  )
+  @IsBoolean()
+  following?: boolean;
+
+  @ApiPropertyOptional({
+    enum: SORTS,
+    default: 'new',
+    description:
+      'popular: beğeni, sonra yorum sayısına göre (yalnızca yayındaki yazılar)',
+  })
+  @IsOptional()
+  @IsIn(SORTS, { message: 'Geçersiz sıralama' })
+  sort: PostSort = 'new';
 }

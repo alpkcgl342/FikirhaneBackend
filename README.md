@@ -78,7 +78,8 @@ FikirhaneBackend/
 │   ├── categories/         # Kategori listesi
 │   ├── comments/           # İç içe yorumlar
 │   ├── likes/              # Beğeni (aç/kapa)
-│   ├── posts/              # Yazı CRUD, slug, okuma süresi, etiketler
+│   ├── posts/              # Yazı CRUD, slug, okuma süresi, etiketler, akış
+│   ├── search/             # Arama
 │   ├── uploads/            # Görsel yükleme (Supabase Storage)
 │   ├── users/              # Profil ve takip
 │   ├── prisma/             # PrismaService
@@ -203,7 +204,7 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 | GET | `/users/:username` | Profil (sayılar, `isFollowing`; e-posta dönmez) | ✅ |
 | PATCH | `/users/me` 🔒 | Profil güncelle (`displayName`, `bio`, `avatarUrl`) | ✅ |
 | POST | `/users/:id/follow` 🔒 | Takip et / bırak → `{ following, followerCount }` | ✅ |
-| GET | `/posts` | Yazı listesi (`?category=&tag=&author=&status=&bookmarked=&page=&limit=`) | ✅ |
+| GET | `/posts` | Yazı listesi (`?category=&tag=&author=&status=&bookmarked=&following=&sort=new/popular&page=&limit=`) | ✅ |
 | GET | `/posts/:slug` | Yazı detayı (taslağı yalnızca yazarı görür) | ✅ |
 | POST | `/posts` 🔒 | Yazı oluştur | ✅ |
 | PATCH | `/posts/:id` 🔒 | Yazı düzenle (sadece yazar) | ✅ |
@@ -214,7 +215,7 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 | GET | `/posts/:id/comments` | Yorumlar (düz liste, `parentId` ile ağaç) | ✅ |
 | POST | `/posts/:id/comments` 🔒 | Yorum / yanıt (`{ content, parentId? }`) | ✅ |
 | GET | `/categories` | Kategoriler | ✅ |
-| GET | `/search?q=` | Arama | |
+| GET | `/search?q=` | Arama: yazılar (başlık, içerik, yazar, etiket) + ilk sayfada en fazla 5 kişi | ✅ |
 | GET | `/notifications` 🔒 | Bildirimler | |
 | POST | `/reports` 🔒 | Şikâyet oluştur | |
 | GET | `/admin/reports` 🔒 | Şikâyetler (moderatör/yönetici) | |
@@ -224,6 +225,8 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 - `GET /posts` varsayılan olarak yayınlanmış yazıları en yeniden eskiye döner: `{ items, page, pageSize, total, totalPages }`. Liste öğelerinde `content` yerine düz metin `excerpt` bulunur.
 - `status=DRAFT` veya `status=ALL` giriş gerektirir ve **her zaman isteyen kullanıcının kendi yazılarını** döner (`author` parametresi yok sayılır).
 - Slug başlıktan üretilir (Türkçe karakterler dönüştürülür) ve sonuna rastgele 6 karakter eklenir; yazı düzenlense de değişmez.
+- `sort=popular` önce beğeni, sonra yorum sayısına, sonra yeniliğe göre sıralar. `following=true` giriş gerektirir ve takip edilen yazarların yazılarını döner.
+- `GET /search` büyük/küçük harf duyarsızdır (Türkçe karakterler dahil). Aranan terimdeki `%` ve `_` kaçışlanır; joker karakter olarak çalışmaz.
 - `readingTime` dakikada 200 kelimeye göre hesaplanır. Etiketler küçük harfe çevrilir, en fazla 5 tanedir ve yoksa oluşturulur.
 - `coverUrl` yalnızca `POST /uploads/image` ile projenin Storage kovasına yüklenmiş bir görsel olabilir. Yükleme, kullanıcının kendi token'ıyla yapılır ve dosya türü içeriğine (magic bytes) bakılarak doğrulanır; SVG kabul edilmez.
 
@@ -266,7 +269,7 @@ Temel tablolar ve ilişkiler (`prisma/schema.prisma`):
 - [x] **Faz 1 — Temel:** Proje iskeleti, veritabanı şeması, kayıt / giriş, e-posta doğrulama
 - [x] **Faz 2 — Yazılar:** Yazı CRUD, Markdown editör, kategoriler, etiketler, görsel yükleme
 - [x] **Faz 3 — Etkileşim:** Yorumlar, beğeni, kaydetme, takip
-- [ ] **Faz 4 — Keşfet:** Ana akış, arama, popüler yazılar
+- [x] **Faz 4 — Keşfet:** Ana akış, arama, popüler yazılar
 - [ ] **Faz 5 — Topluluk:** Bildirimler, şikâyet ve moderasyon paneli
 - [ ] **Faz 6 — Yayın:** Testler, canlı ortama dağıtım, SEO ve performans
 - [ ] **Sonrası:** Karanlık tema, şifre sıfırlama, Google ile giriş

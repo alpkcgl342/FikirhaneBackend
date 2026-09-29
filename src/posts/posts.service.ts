@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { AuthUser } from '../auth/token-verifier.service.js';
+import { containsInsensitive } from '../common/like.js';
 import { isOwnImageUrl } from '../common/storage.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { PostStatus } from '../generated/prisma/enums.js';
@@ -46,7 +47,17 @@ export class PostsService {
 
     if (query.status === 'PUBLISHED') {
       where.status = PostStatus.PUBLISHED;
-      if (query.author) where.author = { username: query.author };
+      const author: Prisma.UserWhereInput = {};
+      if (query.author) author.username = query.author;
+      if (query.following) {
+        if (!viewer) {
+          throw new UnauthorizedException(
+            'Takip ettiklerinin yazılarını görmek için giriş yapın',
+          );
+        }
+        author.followers = { some: { followerId: viewer.id } };
+      }
+      if (Object.keys(author).length) where.author = author;
     } else {
       // Taslaklar yalnızca yazarına gösterilir: DRAFT/ALL her zaman kendi yazılarıdır.
       if (!viewer) {
@@ -70,28 +81,62 @@ export class PostsService {
       };
     }
 
-    const orderBy: Prisma.PostOrderByWithRelationInput =
-      query.status === 'PUBLISHED'
-        ? { createdAt: 'desc' }
-        : { updatedAt: 'desc' };
+    let orderBy: Prisma.PostOrderByWithRelationInput[];
+    if (query.status !== 'PUBLISHED') {
+      orderBy = [{ updatedAt: 'desc' }];
+    } else if (query.sort === 'popular') {
+      // Popüler: önce beğeni, eşitlikte yorum sayısı, sonra yenilik.
+      orderBy = [
+        { likes: { _count: 'desc' } },
+        { comments: { _count: 'desc' } },
+        { createdAt: 'desc' },
+      ];
+    } else {
+      orderBy = [{ createdAt: 'desc' }];
+    }
 
+    return this.paginate(where, orderBy, query.page, query.limit);
+  }
+
+  /** Yayındaki yazılarda başlık, içerik, yazar ve etiket üzerinden arama (büyük/küçük harf duyarsız). */
+  search(q: string, page: number, limit: number) {
+    const term = containsInsensitive(q);
+    const where: Prisma.PostWhereInput = {
+      status: PostStatus.PUBLISHED,
+      OR: [
+        { title: term },
+        { content: term },
+        { author: { displayName: term } },
+        { author: { username: term } },
+        { tags: { some: { tag: { name: term } } } },
+      ],
+    };
+    return this.paginate(where, [{ createdAt: 'desc' }], page, limit);
+  }
+
+  private async paginate(
+    where: Prisma.PostWhereInput,
+    orderBy: Prisma.PostOrderByWithRelationInput[],
+    page: number,
+    limit: number,
+  ) {
     const [total, posts] = await this.prisma.$transaction([
       this.prisma.post.count({ where }),
       this.prisma.post.findMany({
         where,
         orderBy,
         include: postInclude,
-        skip: (query.page - 1) * query.limit,
-        take: query.limit,
+        skip: (page - 1) * limit,
+        take: limit,
       }),
     ]);
 
     return {
       items: posts.map(toPostSummary),
-      page: query.page,
-      pageSize: query.limit,
+      page,
+      pageSize: limit,
       total,
-      totalPages: Math.ceil(total / query.limit),
+      totalPages: Math.ceil(total / limit),
     };
   }
 
