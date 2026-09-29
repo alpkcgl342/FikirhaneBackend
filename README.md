@@ -144,21 +144,26 @@ npm run lint
 
 ## E-posta Doğrulama
 
-Doğrulama backend üzerinden yapılır; token'lar tarayıcı adres çubuğunda taşınmaz.
+**Şu anki durum:** Supabase e-posta şablonları yalnızca özel SMTP bağlandığında düzenlenebildiği için varsayılan şablon kullanılıyor.
 
-1. `POST /auth/register` Supabase'de kullanıcı oluşturur; Supabase doğrulama e-postası gönderir.
-2. E-postadaki bağlantı `<web-sitesi>/api/auth/confirm?token_hash=…&type=email` adresine gider. Web sitesinin `/api` yönlendirmesi isteği bu API'ye iletir.
-3. `GET /auth/confirm`, `token_hash` değerini Supabase'in `verifyOtp` fonksiyonuyla doğrular ve kullanıcıyı `WEB_URL/pages/login.html?confirmed=1` (veya başarısızsa `=0`) adresine yönlendirir.
-4. Bağlantının süresi dolduysa `POST /auth/resend-confirmation` yeni bir e-posta gönderir.
+1. `POST /auth/register` Supabase'de kullanıcı oluşturur (`emailRedirectTo = WEB_URL/pages/login.html?confirmed=1`); Supabase doğrulama e-postası gönderir.
+2. E-postadaki bağlantı Supabase'de doğrulanır ve kullanıcı giriş sayfasına döner. Giriş sayfası sonucu gösterir, Supabase'in adrese eklediği token'ları kullanmadan siler.
+3. Bağlantının süresi dolduysa `POST /auth/resend-confirmation` yeni bir e-posta gönderir.
 
-**Supabase Dashboard ayarları** (bir kez yapılır):
+**Supabase Dashboard ayarları:**
 
-- **Authentication → URL Configuration → Site URL:** web sitesinin adresi (ör. `https://fikirhane-web.vercel.app`).
-- **Authentication → Emails → Confirm signup** şablonunda bağlantı:
-  ```html
-  <a href="{{ .SiteURL }}/api/auth/confirm?token_hash={{ .TokenHash }}&type=email">E-postamı doğrula</a>
-  ```
-- Supabase'in hazır e-posta servisinin gönderim sınırı çok düşüktür; gerçek kullanıcılara açılmadan önce **Authentication → Emails → SMTP Settings** altından özel bir SMTP sağlayıcısı bağlanmalıdır.
+- **Authentication → URL Configuration → Site URL:** `https://fikirhane-web.vercel.app`
+- **Redirect URLs:** `https://fikirhane-web.vercel.app/**` (yerel geliştirme için `http://localhost:5173/**`)
+
+**İleride — doğrulamayı backend'e taşımak:** özel SMTP (**Authentication → Emails → SMTP Settings**) bağlandıktan sonra **Confirm signup** şablonundaki bağlantı şununla değiştirilir; kod tarafında başka değişiklik gerekmez:
+
+```html
+<a href="{{ .SiteURL }}/api/auth/confirm?token_hash={{ .TokenHash }}&type=email">E-postamı doğrula</a>
+```
+
+`GET /auth/confirm` token'ı `verifyOtp` ile doğrular ve `WEB_URL/pages/login.html?confirmed=1` (başarısızsa `=0`) adresine yönlendirir.
+
+Not: Supabase'in hazır e-posta servisinin gönderim sınırı çok düşüktür; gerçek kullanıcılara açılmadan önce özel SMTP bağlanmalıdır.
 
 ---
 
@@ -182,7 +187,7 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 | POST | `/auth/register` | Kayıt ol | ✅ |
 | POST | `/auth/login` | Giriş yap | ✅ |
 | POST | `/auth/refresh` | Token yenile | ✅ |
-| GET | `/auth/confirm` | E-posta doğrulama bağlantısı (yönlendirir) | ✅ |
+| GET | `/auth/confirm` | E-posta doğrulama bağlantısı (özel SMTP ile kullanılır) | ✅ |
 | POST | `/auth/resend-confirmation` | Doğrulama e-postasını tekrar gönder | ✅ |
 | GET | `/auth/me` 🔒 | Oturumdaki kullanıcı | ✅ |
 | GET | `/users/:username` | Profil bilgisi | |

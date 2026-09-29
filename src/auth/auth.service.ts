@@ -55,6 +55,11 @@ export class AuthService {
       .replace(/\/+$/, '');
   }
 
+  /** Supabase'in doğrulama sonrası yönlendirdiği adres (Redirect URLs listesinde olmalı). */
+  private get confirmRedirectUrl(): string {
+    return `${this.webUrl}/pages/login.html?confirmed=1`;
+  }
+
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findFirst({
       where: { OR: [{ username: dto.username }, { email: dto.email }] },
@@ -73,6 +78,7 @@ export class AuthService {
       password: dto.password,
       options: {
         data: { username: dto.username, display_name: dto.displayName },
+        emailRedirectTo: this.confirmRedirectUrl,
       },
     });
     if (error) throw this.toHttpError(error);
@@ -110,8 +116,10 @@ export class AuthService {
   }
 
   /**
-   * E-postadaki doğrulama bağlantısı ({{ .SiteURL }}/api/auth/confirm?token_hash=…&type=email)
-   * buraya gelir. Sonuç, token'lar URL'de taşınmadan giriş sayfasına yönlendirilerek bildirilir.
+   * E-posta şablonu {{ .SiteURL }}/api/auth/confirm?token_hash=…&type=email bağlantısını
+   * kullandığında doğrulama burada yapılır; sonuç, token'lar URL'de taşınmadan giriş sayfasına
+   * yönlendirilerek bildirilir. Supabase şablonları yalnızca özel SMTP ile düzenlenebildiği için
+   * şu an varsayılan şablon kullanılıyor ve doğrulamayı Supabase yapıp confirmRedirectUrl'e dönüyor.
    */
   async confirmEmail(tokenHash: string | undefined, type: string | undefined) {
     const loginUrl = `${this.webUrl}/pages/login.html`;
@@ -133,9 +141,11 @@ export class AuthService {
    * hız sınırı dışındaki durumlarda her zaman aynı yanıt döner.
    */
   async resendConfirmation(email: string) {
-    const { error } = await this.supabase
-      .createAuthClient()
-      .auth.resend({ type: 'signup', email });
+    const { error } = await this.supabase.createAuthClient().auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: this.confirmRedirectUrl },
+    });
     if (
       error?.code === 'over_email_send_rate_limit' ||
       error?.code === 'over_request_rate_limit'

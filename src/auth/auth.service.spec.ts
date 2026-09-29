@@ -101,6 +101,14 @@ describe('AuthService', () => {
       });
       expect(result.session).toBeNull();
       expect(result.emailConfirmationRequired).toBe(true);
+      expect(auth.signUp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            emailRedirectTo:
+              'https://fikirhane.example/pages/login.html?confirmed=1',
+          }),
+        }),
+      );
       expect(result.user.username).toBe('ayse');
     });
 
