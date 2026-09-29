@@ -75,10 +75,13 @@ FikirhaneBackend/
 │   ├── app.module.ts
 │   ├── auth/               # Kayıt, giriş, e-posta doğrulama, token doğrulama, guard
 │   ├── bookmarks/          # Kaydetme (aç/kapa)
+│   ├── admin/              # Moderasyon: şikâyetler, içerik kaldırma, engelleme, roller
 │   ├── categories/         # Kategori listesi
 │   ├── comments/           # İç içe yorumlar
 │   ├── likes/              # Beğeni (aç/kapa)
+│   ├── notifications/      # Bildirimler
 │   ├── posts/              # Yazı CRUD, slug, okuma süresi, etiketler, akış
+│   ├── reports/            # Şikâyet oluşturma
 │   ├── search/             # Arama
 │   ├── uploads/            # Görsel yükleme (Supabase Storage)
 │   ├── users/              # Profil ve takip
@@ -99,7 +102,7 @@ FikirhaneBackend/
 └── tsconfig.json
 ```
 
-Sonraki fazlarda `src/` altına `notifications` ve `reports` modülleri eklenecek. Etiketler yazılarla, takip ise `users` modülüyle birlikte yönetilir.
+Etiketler yazılarla, takip ise `users` modülüyle birlikte yönetilir.
 
 ---
 
@@ -190,7 +193,7 @@ Web sitesinin `vercel.json` dosyası `/api/*` isteklerini bu projenin adresine y
 
 ## API Özeti
 
-Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektirir (`Authorization: Bearer <accessToken>`).
+Tüm uç noktalar `/api` ön eki ile başlar. 🔒 giriş gerektirir (`Authorization: Bearer <accessToken>`), 🛡️ `MODERATOR` veya `ADMIN`, 👑 yalnızca `ADMIN` rolü ister.
 
 | Metot | Uç nokta | Açıklama | Durum |
 |---|---|---|---|
@@ -216,9 +219,17 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 | POST | `/posts/:id/comments` 🔒 | Yorum / yanıt (`{ content, parentId? }`) | ✅ |
 | GET | `/categories` | Kategoriler | ✅ |
 | GET | `/search?q=` | Arama: yazılar (başlık, içerik, yazar, etiket) + ilk sayfada en fazla 5 kişi | ✅ |
-| GET | `/notifications` 🔒 | Bildirimler | |
-| POST | `/reports` 🔒 | Şikâyet oluştur | |
-| GET | `/admin/reports` 🔒 | Şikâyetler (moderatör/yönetici) | |
+| GET | `/notifications` 🔒 | Bildirimler (sayfa başına 20, `unreadCount` ile) | ✅ |
+| GET | `/notifications/unread-count` 🔒 | Okunmamış bildirim sayısı | ✅ |
+| PATCH | `/notifications/read-all` 🔒 | Tümünü okundu işaretle | ✅ |
+| POST | `/reports` 🔒 | Şikâyet oluştur (`{ targetType, targetId, reason }`) | ✅ |
+| GET | `/admin/reports` 🛡️ | Şikâyetler (`?status=PENDING/RESOLVED/DISMISSED&page=`), hedef önizlemesiyle | ✅ |
+| PATCH | `/admin/reports/:id` 🛡️ | Şikâyeti kapat (`{ status: RESOLVED / DISMISSED }`) | ✅ |
+| DELETE | `/admin/posts/:id` 🛡️ | Yazıyı kaldır | ✅ |
+| DELETE | `/admin/comments/:id` 🛡️ | Yorumu (ve yanıtlarını) kaldır | ✅ |
+| GET | `/admin/users` 🛡️ | Kullanıcılar (`?q=&page=`) | ✅ |
+| PATCH | `/admin/users/:id/ban` 🛡️ | Engelle / engeli kaldır (`{ banned }`) | ✅ |
+| PATCH | `/admin/users/:id/role` 👑 | Rol değiştir (`{ role }`) | ✅ |
 
 ### Yazılar
 
@@ -229,6 +240,13 @@ Tüm uç noktalar `/api` ön eki ile başlar. 🔒 işaretliler giriş gerektiri
 - `GET /search` büyük/küçük harf duyarsızdır (Türkçe karakterler dahil). Aranan terimdeki `%` ve `_` kaçışlanır; joker karakter olarak çalışmaz.
 - `readingTime` dakikada 200 kelimeye göre hesaplanır. Etiketler küçük harfe çevrilir, en fazla 5 tanedir ve yoksa oluşturulur.
 - `coverUrl` yalnızca `POST /uploads/image` ile projenin Storage kovasına yüklenmiş bir görsel olabilir. Yükleme, kullanıcının kendi token'ıyla yapılır ve dosya türü içeriğine (magic bytes) bakılarak doğrulanır; SVG kabul edilmez.
+
+### Moderasyon ve bildirimler
+
+- **Roller:** `USER`, `MODERATOR`, `ADMIN`. Rol her istekte veritabanından okunur (token'da taşınmaz); rol değişikliği anında geçerli olur.
+- **Engelleme:** engellenen kullanıcı giriş yapamaz; açık bir oturumu varsa yalnızca okuma (GET) yapabilir. Kimse kendini ve bir `ADMIN`'i engelleyemez; `MODERATOR`'ları yalnızca `ADMIN` engelleyebilir. Kimse kendi rolünü değiştiremez.
+- **Şikâyet:** yayındaki yazı, yorum ya da kullanıcı şikâyet edilebilir; kendi içeriğiniz ve aynı hedef için bekleyen ikinci şikâyet reddedilir. İçerik kaldırılınca veya kullanıcı engellenince ilgili bekleyen şikâyetler otomatik çözülür.
+- **Bildirimler:** yazınıza yorum (`COMMENT`), yorumunuza yanıt (`COMMENT`, `data.reply: true`), beğeni (`LIKE`) ve yeni takipçi (`FOLLOW`). Kişi kendi işlemi için bildirim almaz; aynı kişinin aynı yazıya tekrar beğenisi veya tekrar takibi yeni bildirim üretmez.
 
 ### Kimlik doğrulama yanıtları
 
@@ -251,7 +269,7 @@ Hata yanıtları NestJS biçimindedir: `{ "statusCode": 400, "message": "…" | 
 
 Temel tablolar ve ilişkiler (`prisma/schema.prisma`):
 
-- **User** (`users`) — id (= Supabase `auth.users.id`), username, email, displayName, bio, avatarUrl, role, createdAt. Şifreler Supabase Auth'ta tutulur.
+- **User** (`users`) — id (= Supabase `auth.users.id`), username, email, displayName, bio, avatarUrl, role, isBanned, createdAt. Şifreler Supabase Auth'ta tutulur.
 - **Post** (`posts`) — id, authorId → User, title, slug, content (Markdown), coverUrl, status (`DRAFT` / `PUBLISHED`), categoryId → Category, readingTime, createdAt, updatedAt
 - **Category** (`categories`) — id, name, slug, description
 - **Tag** (`tags`) — id, name ↔ Post (çoka-çok, `post_tags`)
@@ -270,7 +288,7 @@ Temel tablolar ve ilişkiler (`prisma/schema.prisma`):
 - [x] **Faz 2 — Yazılar:** Yazı CRUD, Markdown editör, kategoriler, etiketler, görsel yükleme
 - [x] **Faz 3 — Etkileşim:** Yorumlar, beğeni, kaydetme, takip
 - [x] **Faz 4 — Keşfet:** Ana akış, arama, popüler yazılar
-- [ ] **Faz 5 — Topluluk:** Bildirimler, şikâyet ve moderasyon paneli
+- [x] **Faz 5 — Topluluk:** Bildirimler, şikâyet ve moderasyon paneli
 - [ ] **Faz 6 — Yayın:** Testler, canlı ortama dağıtım, SEO ve performans
 - [ ] **Sonrası:** Karanlık tema, şifre sıfırlama, Google ile giriş
 

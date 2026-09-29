@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type { NotificationsService } from '../notifications/notifications.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import type { SupabaseService } from '../supabase/supabase.service.js';
 import { UsersService } from './users.service.js';
@@ -12,6 +13,7 @@ const dbUser = {
   displayName: 'Ayşe',
   bio: null,
   avatarUrl: null,
+  isBanned: false,
   createdAt: new Date('2026-09-29T00:00:00Z'),
   _count: { posts: 4, followers: 2, following: 1 },
 };
@@ -26,11 +28,13 @@ function setup() {
       count: vi.fn(),
     },
   };
+  const notifications = { notify: vi.fn() };
   const service = new UsersService(
     prisma as unknown as PrismaService,
     { projectUrl: SUPABASE_URL } as unknown as SupabaseService,
+    notifications as unknown as NotificationsService,
   );
-  return { service, prisma };
+  return { service, prisma, notifications };
 }
 
 describe('UsersService', () => {
@@ -51,6 +55,7 @@ describe('UsersService', () => {
         displayName: 'Ayşe',
         bio: null,
         avatarUrl: null,
+        isBanned: false,
         createdAt: dbUser.createdAt,
         postCount: 4,
         followerCount: 2,
@@ -115,8 +120,8 @@ describe('UsersService', () => {
       );
     });
 
-    it('takip eder ve güncel takipçi sayısını döner', async () => {
-      const { service, prisma } = setup();
+    it('takip eder, bildirim gönderir ve güncel takipçi sayısını döner', async () => {
+      const { service, prisma, notifications } = setup();
       prisma.user.count.mockResolvedValue(1);
       prisma.follow.deleteMany.mockResolvedValue({ count: 0 });
       prisma.follow.create.mockResolvedValue({});
@@ -129,6 +134,24 @@ describe('UsersService', () => {
       expect(prisma.follow.create).toHaveBeenCalledWith({
         data: { followerId: ME.id, followingId: 'u1' },
       });
+      expect(notifications.notify).toHaveBeenCalledWith({
+        type: 'FOLLOW',
+        recipientId: 'u1',
+        actorId: ME.id,
+      });
+    });
+
+    it('takibi bırakınca bildirim göndermez', async () => {
+      const { service, prisma, notifications } = setup();
+      prisma.user.count.mockResolvedValue(1);
+      prisma.follow.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.follow.count.mockResolvedValue(0);
+
+      await expect(service.toggleFollow('u1', ME.id)).resolves.toEqual({
+        following: false,
+        followerCount: 0,
+      });
+      expect(notifications.notify).not.toHaveBeenCalled();
     });
   });
 });

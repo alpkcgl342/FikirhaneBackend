@@ -177,7 +177,13 @@ export class PostsService {
   async findPublishedOrThrow(postId: string) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
-      select: { id: true, authorId: true, status: true },
+      select: {
+        id: true,
+        authorId: true,
+        status: true,
+        slug: true,
+        title: true,
+      },
     });
     if (!post || post.status !== PostStatus.PUBLISHED) {
       throw new NotFoundException('Yazı bulunamadı');

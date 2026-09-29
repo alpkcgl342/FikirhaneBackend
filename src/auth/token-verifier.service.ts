@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import type { Role } from '../generated/prisma/enums.js';
 import { SupabaseService } from '../supabase/supabase.service.js';
 
 export interface AuthUser {
   id: string;
   email: string;
+  /** JwtAuthGuard tarafından veritabanından eklenir (token'da yoktur). */
+  role?: Role;
 }
 
 /**

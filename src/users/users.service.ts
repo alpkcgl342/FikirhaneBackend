@@ -9,7 +9,8 @@ import { containsInsensitive } from '../common/like.js';
 import { isOwnImageUrl } from '../common/storage.js';
 import { toggleRelation } from '../common/toggle.js';
 import type { Prisma } from '../generated/prisma/client.js';
-import { PostStatus } from '../generated/prisma/enums.js';
+import { NotificationType, PostStatus } from '../generated/prisma/enums.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SupabaseService } from '../supabase/supabase.service.js';
 import type { UpdateProfileDto } from './dto/update-profile.dto.js';
@@ -21,6 +22,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     supabase: SupabaseService,
+    private readonly notifications: NotificationsService,
   ) {
     this.supabaseUrl = supabase.projectUrl;
   }
@@ -35,6 +37,7 @@ export class UsersService {
         displayName: true,
         bio: true,
         avatarUrl: true,
+        isBanned: true,
         createdAt: true,
         _count: {
           select: {
@@ -119,6 +122,13 @@ export class UsersService {
       () => this.prisma.follow.deleteMany({ where }),
       () => this.prisma.follow.create({ data: where }),
     );
+    if (following) {
+      await this.notifications.notify({
+        type: NotificationType.FOLLOW,
+        recipientId: targetId,
+        actorId: followerId,
+      });
+    }
     const followerCount = await this.prisma.follow.count({
       where: { followingId: targetId },
     });

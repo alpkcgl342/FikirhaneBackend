@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type { NotificationsService } from '../notifications/notifications.service.js';
 import type { PostsService } from '../posts/posts.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import { CommentsService } from './comments.service.js';
@@ -10,12 +11,21 @@ function setup() {
   const prisma = {
     comment: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
   };
-  const posts = { findPublishedOrThrow: vi.fn().mockResolvedValue({}) };
+  const posts = {
+    findPublishedOrThrow: vi.fn().mockResolvedValue({
+      id: POST_ID,
+      authorId: 'yazar',
+      slug: 'yazi',
+      title: 'Yazı',
+    }),
+  };
+  const notifications = { notify: vi.fn() };
   const service = new CommentsService(
     prisma as unknown as PrismaService,
     posts as unknown as PostsService,
+    notifications as unknown as NotificationsService,
   );
-  return { service, prisma, posts };
+  return { service, prisma, posts, notifications };
 }
 
 describe('CommentsService', () => {
@@ -41,7 +51,10 @@ describe('CommentsService', () => {
 
   it('yanıtı üst yoruma bağlar', async () => {
     const { service, prisma } = setup();
-    prisma.comment.findUnique.mockResolvedValue({ postId: POST_ID });
+    prisma.comment.findUnique.mockResolvedValue({
+      postId: POST_ID,
+      authorId: 'yorumcu',
+    });
     prisma.comment.create.mockResolvedValue({ id: 'c1' });
 
     await service.create(
@@ -55,6 +68,66 @@ describe('CommentsService', () => {
       post: { connect: { id: POST_ID } },
       author: { connect: { id: 'u1' } },
       parent: { connect: { id: PARENT_ID } },
+    });
+  });
+
+  describe('bildirimler', () => {
+    const post = { id: POST_ID, slug: 'yazi', title: 'Yazı' };
+
+    it('yorum yazarına bildirilir', async () => {
+      const { service, prisma, notifications } = setup();
+      prisma.comment.create.mockResolvedValue({ id: 'c1' });
+
+      await service.create(POST_ID, { content: 'Merhaba' }, 'u1');
+
+      expect(notifications.notify).toHaveBeenCalledTimes(1);
+      expect(notifications.notify).toHaveBeenCalledWith({
+        type: 'COMMENT',
+        actorId: 'u1',
+        post,
+        commentId: 'c1',
+        recipientId: 'yazar',
+      });
+    });
+
+    it('yanıtta yorum sahibine "yanıt", yazara "yorum" bildirimi gider', async () => {
+      const { service, prisma, notifications } = setup();
+      prisma.comment.findUnique.mockResolvedValue({
+        postId: POST_ID,
+        authorId: 'yorumcu',
+      });
+      prisma.comment.create.mockResolvedValue({ id: 'c2' });
+
+      await service.create(
+        POST_ID,
+        { content: 'Yanıt', parentId: PARENT_ID },
+        'u1',
+      );
+
+      expect(
+        notifications.notify.mock.calls.map(([n]) => [n.recipientId, n.reply]),
+      ).toEqual([
+        ['yorumcu', true],
+        ['yazar', undefined],
+      ]);
+    });
+
+    it('yanıtlanan yorum yazarınınsa yalnızca tek (yanıt) bildirimi gider', async () => {
+      const { service, prisma, notifications } = setup();
+      prisma.comment.findUnique.mockResolvedValue({
+        postId: POST_ID,
+        authorId: 'yazar',
+      });
+      prisma.comment.create.mockResolvedValue({ id: 'c3' });
+
+      await service.create(
+        POST_ID,
+        { content: 'Yanıt', parentId: PARENT_ID },
+        'u1',
+      );
+
+      expect(notifications.notify).toHaveBeenCalledTimes(1);
+      expect(notifications.notify.mock.calls[0][0].reply).toBe(true);
     });
   });
 

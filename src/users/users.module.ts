@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { UsersController } from './users.controller.js';
 import { UsersService } from './users.service.js';
 
 /** Profil ve takip (README'deki follows/ işlevi burada, /users/:id/follow altında). */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, NotificationsModule],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],

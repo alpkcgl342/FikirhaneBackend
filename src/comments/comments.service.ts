@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client.js';
+import { NotificationType } from '../generated/prisma/enums.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PostsService } from '../posts/posts.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateCommentDto } from './dto/create-comment.dto.js';
@@ -12,7 +14,9 @@ const commentSelect = {
   parentId: true,
   content: true,
   createdAt: true,
-  author: { select: { username: true, displayName: true, avatarUrl: true } },
+  author: {
+    select: { id: true, username: true, displayName: true, avatarUrl: true },
+  },
 } satisfies Prisma.CommentSelect;
 
 @Injectable()
@@ -20,6 +24,7 @@ export class CommentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly posts: PostsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Yorumlar eskiden yeniye, düz liste olarak döner; ağaç `parentId` ile kurulur. */
@@ -35,20 +40,22 @@ export class CommentsService {
   }
 
   async create(postId: string, dto: CreateCommentDto, authorId: string) {
-    await this.posts.findPublishedOrThrow(postId);
+    const post = await this.posts.findPublishedOrThrow(postId);
 
+    let parentAuthorId: string | null = null;
     if (dto.parentId) {
       const parent = await this.prisma.comment.findUnique({
         where: { id: dto.parentId },
-        select: { postId: true },
+        select: { postId: true, authorId: true },
       });
       // Başka bir yazının yorumuna yanıt verilemez.
       if (!parent || parent.postId !== postId) {
         throw new BadRequestException('Yanıt verilen yorum bulunamadı');
       }
+      parentAuthorId = parent.authorId;
     }
 
-    return this.prisma.comment.create({
+    const comment = await this.prisma.comment.create({
       data: {
         content: dto.content,
         post: { connect: { id: postId } },
@@ -57,5 +64,26 @@ export class CommentsService {
       },
       select: commentSelect,
     });
+
+    // Yanıtlanan yorumun sahibine "yanıt", yazarına (farklı kişiyse) "yorum" bildirimi.
+    const postRef = { id: post.id, slug: post.slug, title: post.title };
+    const base = {
+      type: NotificationType.COMMENT,
+      actorId: authorId,
+      post: postRef,
+      commentId: comment.id,
+    };
+    if (parentAuthorId) {
+      await this.notifications.notify({
+        ...base,
+        recipientId: parentAuthorId,
+        reply: true,
+      });
+    }
+    if (post.authorId !== parentAuthorId) {
+      await this.notifications.notify({ ...base, recipientId: post.authorId });
+    }
+
+    return comment;
   }
 }

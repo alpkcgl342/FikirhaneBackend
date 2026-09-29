@@ -1,10 +1,13 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { Role } from '../generated/prisma/enums.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import {
   TokenVerifierService,
   type AuthUser,
@@ -21,14 +24,24 @@ export type MaybeAuthenticatedRequest = Request & {
   accessToken?: string;
 };
 
+export const BANNED_MESSAGE =
+  'Hesabınız askıya alındı; içerik paylaşamaz ve etkileşimde bulunamazsınız';
+
 function bearerToken(request: Request): string | null {
   const [scheme, token] = (request.headers.authorization ?? '').split(' ');
   return scheme === 'Bearer' && token ? token : null;
 }
 
+/**
+ * Token'ı doğrular, kullanıcının rolünü veritabanından ekler.
+ * Engellenmiş kullanıcılar yalnızca okuma (GET) yapabilir.
+ */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly verifier: TokenVerifierService) {}
+  constructor(
+    private readonly verifier: TokenVerifierService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -36,12 +49,24 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) {
       throw new UnauthorizedException('Giriş yapmanız gerekiyor');
     }
+
+    let user: AuthUser;
     try {
-      request.user = await this.verifier.verify(token);
-      request.accessToken = token;
+      user = await this.verifier.verify(token);
     } catch {
       throw new UnauthorizedException('Oturum geçersiz veya süresi dolmuş');
     }
+
+    const profile = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { role: true, isBanned: true },
+    });
+    if (profile?.isBanned && request.method !== 'GET') {
+      throw new ForbiddenException(BANNED_MESSAGE);
+    }
+
+    request.user = { ...user, role: profile?.role ?? Role.USER };
+    request.accessToken = token;
     return true;
   }
 }

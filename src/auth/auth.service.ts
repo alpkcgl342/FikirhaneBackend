@@ -37,6 +37,7 @@ export interface PublicUser {
   bio: string | null;
   avatarUrl: string | null;
   role: User['role'];
+  isBanned: boolean;
   createdAt: Date;
 }
 
@@ -173,6 +174,10 @@ export class AuthService {
     if (error) throw this.toHttpError(error);
 
     const profile = await this.ensureProfile(data.user);
+    // Supabase oturumu açmış olsa da token'lar istemciye verilmez.
+    if (profile.isBanned) {
+      throw new ForbiddenException('Hesabınız askıya alındı');
+    }
     return { user: toPublicUser(profile), session: toTokens(data.session) };
   }
 
@@ -298,6 +303,7 @@ export function toPublicUser(user: User): PublicUser {
     bio: user.bio,
     avatarUrl: user.avatarUrl,
     role: user.role,
+    isBanned: user.isBanned,
     createdAt: user.createdAt,
   };
 }

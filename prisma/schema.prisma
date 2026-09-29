@@ -50,6 +50,8 @@ model User {
   bio         String?  @db.VarChar(300)
   avatarUrl   String?  @map("avatar_url")
   role        Role     @default(USER)
+  // Moderasyon: engellenen kullanıcı giriş yapamaz ve içerik üretemez.
+  isBanned    Boolean  @default(false) @map("is_banned")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   posts         Post[]
